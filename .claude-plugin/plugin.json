@@ -1,7 +1,9 @@
 {
   "name": "repo-docs",
-  "version": "0.1.0",
-  "author": { "name": "Prithiv M U" },
-  "description": "/docs opens a pane in Claude Code: click CHANGELOG.md or a docs/**/*.md file to read it as Markdown",
+  "version": "0.2.0",
+  "author": {
+    "name": "Prithiv M U"
+  },
+  "description": "/docs pane for repo Markdown, /receipt turn receipts, /park notes, secret-shield redaction of tool output, and blast-radius confirms for destructive Bash",
   "types": "./types/index.d.ts"
 }

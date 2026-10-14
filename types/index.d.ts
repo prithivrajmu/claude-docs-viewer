@@ -17,6 +17,6 @@ export type DocsView = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'repo-docs': { view: DocsView }
+    'repo-docs': { view: DocsView; isReceiptOn: boolean }
   }
 }

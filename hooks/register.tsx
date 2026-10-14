@@ -2,6 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { DocsView } from '../types'
+import { register as secretShield } from './secret-shield'
+import { register as turnReceipt, startReceipt } from './turn-receipt'
+import { register as blastRadius } from './blast-radius'
+import { register as park, startPark } from './park'
 
 const PANE = 'repo-docs'
 const WORKTREES = '.claude/worktrees'
@@ -71,12 +75,14 @@ const packageName = async ($: any): Promise<string> => {
   }
 }
 
-export const register: Register = on => {
+const docs: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'docs',
       description: 'Browse Markdown files (and .html/.txt) in the repo and its worktrees in a pane',
     })
+    await startReceipt($)
+    await startPark($)
     return next(e)
   })
 
@@ -87,7 +93,7 @@ export const register: Register = on => {
     await update($, view, () => ({ ...EMPTY, files, notes, worktrees }))
     await $.ui.open({ id: PANE, title: 'Docs' })
     return { text: `Docs pane opened: ${files.length} files, ${notes.length} release notes, ${worktrees.length} worktrees.` }
-  })
+  }).catch(() => ({ text: 'Docs pane could not open.' }))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Markdown, Code } = $.ui.resolve(e)
@@ -167,4 +173,14 @@ export const register: Register = on => {
       </Box>
     )
   })
+}
+
+// The engine takes one hooks module per plugin, so each mod is a file of its own, registered here.
+// secret-shield comes right after /docs so it is in place before any mod that reads tool output.
+export const register: Register = (on, options) => {
+  docs(on, options)
+  secretShield(on, options)
+  turnReceipt(on, options)
+  blastRadius(on, options)
+  park(on, options)
 }
