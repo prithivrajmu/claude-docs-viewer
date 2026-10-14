@@ -1,0 +1,5 @@
+{
+  "name": "claude-docs-viewer",
+  "owner": { "name": "Prithiv M U" },
+  "plugins": [{ "name": "repo-docs", "source": "./" }]
+}
