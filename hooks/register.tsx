@@ -4,26 +4,39 @@ import type { Register } from 'claude-code'
 import type { DocsView } from '../types'
 
 const PANE = 'repo-docs'
+const WORKTREES = '.claude/worktrees'
+const SKIP = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage'])
+const DOC = /\.(md|mdx|markdown)$/i // drawn as Markdown
+const WANTED = /\.(md|mdx|markdown|html?|txt)$/i // the rest is drawn as code
 const MAX_CHARS = 90000 // one drawing holds 100000 characters of Markdown
 const NOTES_ROOT = '.claude/release-notes' // under the home folder, one subfolder per package.json name
-const EMPTY: DocsView = { files: [], notes: [], path: null, text: '', note: '' }
+const EMPTY: DocsView = { files: [], notes: [], worktrees: [], openWt: '', wtFiles: [], path: null, text: '', note: '' }
 const view = atom({ plugin: 'repo-docs', key: 'view' } as const, EMPTY)
 
-// Relative to the session's working directory, so a worktree lists its own files.
+// Paths are relative to the session's working directory, so a worktree session lists its own files.
+// `root` is '' for the working directory or a worktree's folder under it.
 // ponytail: scans on /docs and on Refresh only; add a watcher if that is not enough.
-const scan = async ($: any): Promise<string[]> => {
+const scan = async ($: any, root = ''): Promise<string[]> => {
   const out: string[] = []
   const walk = async (dir: string): Promise<void> => {
-    for (const f of await $.fs.list(dir).catch(() => [])) {
-      const p = `${dir}/${f.name}`
-      if (f.kind === 'dir') await walk(p)
-      else if (f.kind === 'file' && f.name.endsWith('.md')) out.push(p)
+    for (const f of await $.fs.list(dir || undefined).catch(() => [])) {
+      const p = dir ? `${dir}/${f.name}` : f.name
+      if (f.kind === 'dir') {
+        if (!SKIP.has(f.name) && p !== WORKTREES) await walk(p)
+      } else if (f.kind === 'file' && WANTED.test(f.name)) out.push(p)
     }
   }
-  await walk('docs')
-  if (await $.fs.exists('CHANGELOG.md')) out.unshift('CHANGELOG.md')
-  return out.sort((a, b) => (a === 'CHANGELOG.md' ? -1 : b === 'CHANGELOG.md' ? 1 : a.localeCompare(b)))
+  await walk(root)
+  const first = root ? `${root}/CHANGELOG.md` : 'CHANGELOG.md'
+  return out.sort((a, b) => (a === first ? -1 : b === first ? 1 : a.localeCompare(b)))
 }
+
+// Worktree folder names only; each one is scanned when opened.
+const scanWorktrees = async ($: any): Promise<string[]> =>
+  (await $.fs.list(WORKTREES).catch(() => []))
+    .filter((f: any) => f.kind === 'dir')
+    .map((f: any) => f.name as string)
+    .sort((a: string, b: string) => a.localeCompare(b))
 
 // Numeric-aware, so 1.10.0 sorts after 1.9.0.
 const byVersion = (a: string, b: string): number => {
@@ -62,7 +75,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'docs',
-      description: 'Browse CHANGELOG.md and docs/**/*.md in a pane',
+      description: 'Browse Markdown files (and .html/.txt) in the repo and its worktrees in a pane',
     })
     return next(e)
   })
@@ -70,13 +83,14 @@ export const register: Register = on => {
   on('command.run', { command: 'docs' }, async $ => {
     const files = await scan($)
     const notes = await scanNotes($)
-    await update($, view, () => ({ files, notes, path: null, text: '', note: '' }))
+    const worktrees = await scanWorktrees($)
+    await update($, view, () => ({ ...EMPTY, files, notes, worktrees }))
     await $.ui.open({ id: PANE, title: 'Docs' })
-    return { text: `Docs pane opened: ${files.length} files, ${notes.length} release notes.` }
+    return { text: `Docs pane opened: ${files.length} files, ${notes.length} release notes, ${worktrees.length} worktrees.` }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Markdown } = $.ui.resolve(e)
+    const { Box, Text, Button, Markdown, Code } = $.ui.resolve(e)
     // $.state outlives a hot reload, so a value saved by an older version may lack newer fields.
     const v: DocsView = { ...EMPTY, ...(await read($, view)) }
 
@@ -95,10 +109,20 @@ export const register: Register = on => {
       await update($, view, old => ({ ...old, path, text, note }))
     }
     const back = () => update($, view, old => ({ ...old, path: null, text: '', note: '' }))
+    const wtPrefix = `${WORKTREES}/${v.openWt}/`
     const refresh = async () => {
       const files = await scan($)
       const notes = await scanNotes($)
-      await update($, view, old => ({ ...old, files, notes }))
+      const worktrees = await scanWorktrees($)
+      const openWt = worktrees.includes(v.openWt) ? v.openWt : ''
+      const wtFiles = openWt ? await scan($, `${WORKTREES}/${openWt}`) : []
+      await update($, view, old => ({ ...old, files, notes, worktrees, openWt, wtFiles }))
+    }
+    const toggle = async (name: string) => {
+      if (v.openWt === name) return update($, view, old => ({ ...old, openWt: '', wtFiles: [] }))
+      await update($, view, old => ({ ...old, openWt: name, wtFiles: [] }))
+      const wtFiles = await scan($, `${WORKTREES}/${name}`)
+      await update($, view, old => (old.openWt === name ? { ...old, wtFiles } : old))
     }
 
     if (v.path === null) {
@@ -108,7 +132,7 @@ export const register: Register = on => {
             <Text dimColor>{v.files.length + v.notes.length} files. Click one to read it. </Text>
             <Button key="refresh" label="Refresh" onPress={refresh} />
           </Box>
-          {v.files.length + v.notes.length === 0 && <Text dimColor>No CHANGELOG.md or docs/*.md here.</Text>}
+          {v.files.length + v.notes.length === 0 && <Text dimColor>No Markdown files here.</Text>}
           {v.notes.length > 0 && <Text bold>Release notes</Text>}
           {v.notes.map(path => (
             <Button key={path} label={path.split('/').pop()} onPress={() => openFile(path)} />
@@ -117,6 +141,17 @@ export const register: Register = on => {
           {v.files.map(path => (
             <Button key={path} label={path} onPress={() => openFile(path)} />
           ))}
+          {v.worktrees.length > 0 && <Text bold>Worktrees ({v.worktrees.length})</Text>}
+          {v.worktrees.flatMap(name => [
+            <Button key={`wt:${name}`} label={`${v.openWt === name ? 'v' : '>'} ${name}`} onPress={() => toggle(name)} />,
+            ...(v.openWt === name
+              ? v.wtFiles.length === 0
+                ? [<Text key={`wt-empty:${name}`} dimColor>  No docs found (or still scanning).</Text>]
+                : v.wtFiles.map(path => (
+                    <Button key={path} label={`  ${path.slice(wtPrefix.length)}`} onPress={() => openFile(path)} />
+                  ))
+              : []),
+          ])}
         </Box>
       )
     }
@@ -128,7 +163,7 @@ export const register: Register = on => {
           <Text bold> {v.path}</Text>
         </Box>
         {v.note !== '' && <Text dimColor>{v.note}</Text>}
-        <Markdown text={v.text} />
+        {DOC.test(v.path) ? <Markdown text={v.text} /> : <Code source={v.text} path={v.path} />}
       </Box>
     )
   })
