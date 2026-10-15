@@ -63,20 +63,24 @@ export const register: Register = on => {
     if (e.props.hasSurvey || parked === null) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const ago = timeAgo(parked.at, await $.clock.now())
+    const below = await next(e) // stack on top of the bands beneath (pet, burn) instead of hiding them
     return (
-      <Box>
-        <Text dimColor>
-          Parked: {parked.note || '(no note)'} ({ago}){' '}
-        </Text>
-        <Button
-          key="dismiss"
-          label="Dismiss"
-          onPress={async () => {
-            await $.process.run(['rm', '-f', await file($)])
-            parked = null
-            $.ui.invalidate('ui.render')
-          }}
-        />
+      <Box flexDirection="column">
+        <Box>
+          <Text dimColor>
+            Parked: {parked.note || '(no note)'} ({ago}){' '}
+          </Text>
+          <Button
+            key="dismiss"
+            label="Dismiss"
+            onPress={async () => {
+              await $.process.run(['rm', '-f', await file($)])
+              parked = null
+              $.ui.invalidate('ui.render')
+            }}
+          />
+        </Box>
+        {below}
       </Box>
     )
   })

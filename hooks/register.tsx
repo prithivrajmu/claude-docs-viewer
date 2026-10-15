@@ -6,6 +6,9 @@ import { register as secretShield } from './secret-shield'
 import { register as turnReceipt, startReceipt } from './turn-receipt'
 import { register as blastRadius } from './blast-radius'
 import { register as park, startPark } from './park'
+import { register as codePet, startPet } from './code-pet'
+import { register as spinnerPacks, startSpinners } from './spinner-packs'
+import { register as burn, startBurn } from './burn-meter'
 
 const PANE = 'repo-docs'
 const WORKTREES = '.claude/worktrees'
@@ -83,6 +86,9 @@ const docs: Register = on => {
     })
     await startReceipt($)
     await startPark($)
+    await startPet($)
+    await startSpinners($)
+    await startBurn($)
     return next(e)
   })
 
@@ -183,4 +189,7 @@ export const register: Register = (on, options) => {
   turnReceipt(on, options)
   blastRadius(on, options)
   park(on, options)
+  codePet(on, options)
+  spinnerPacks(on, options)
+  burn(on, options)
 }

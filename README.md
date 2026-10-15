@@ -24,6 +24,18 @@ Holds destructive Bash commands (`rm -r`, `git reset --hard`, `git push --force`
 
 Saves where you left off (note, branch, last prompt) to `~/.claude/park/<repo>.json`. The next session in that repo shows a "Parked: <note> (2d ago)" band above the prompt with **Dismiss**. `/park clear` deletes it.
 
+## /pet
+
+Toggles code-pet, a small emoji pet above the prompt. It eats while tools run, gets sick on errors, cheers after a turn and naps after 60 s idle.
+
+## /spinner <pirate|shakespeare|space|noir|off|list>
+
+Swaps Claude's spinner verbs for a themed word pack. The choice is remembered in `~/.claude/spinner-pack`. Only the live spinner changes, not the past-tense "Baked for 3s" line.
+
+## /burn
+
+Toggles a fire-style meter above the prompt (🔥 flames, `▁..▇` bar, token count) showing the tokens spent this session. Tiers at 50k, 200k and 500k tokens. It resets on hot reload.
+
 ## Install
 
 At the prompt of a terminal session:

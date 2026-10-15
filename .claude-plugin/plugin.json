@@ -1,9 +1,9 @@
 {
   "name": "repo-docs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": {
     "name": "Prithiv M U"
   },
-  "description": "/docs pane for repo Markdown, /receipt turn receipts, /park notes, secret-shield redaction of tool output, and blast-radius confirms for destructive Bash",
+  "description": "/docs pane for repo Markdown, /receipt turn receipts, /park notes, secret-shield redaction of tool output, blast-radius confirms for destructive Bash, /pet code-pet, /spinner themed spinner words and /burn token burn meter",
   "types": "./types/index.d.ts"
 }
