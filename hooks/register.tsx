@@ -78,6 +78,32 @@ const packageName = async ($: any): Promise<string> => {
   }
 }
 
+const loadDoc = async ($: any, path: string) => {
+  let text = ''
+  let note = ''
+  try {
+    text = await $.fs.read(path)
+    if (text.length > MAX_CHARS) {
+      text = text.slice(0, MAX_CHARS)
+      note = 'Cut at 90000 characters.'
+    }
+  } catch {
+    note = `Cannot read ${path}.`
+  }
+  await update($, view, old => ({ ...old, path, text, note }))
+}
+
+// Doc paths a reply mentions become links that open in the pane. Only files that exist are linked.
+const LINK = 'file:///__docs__/'
+const MENTION = /(?<![\w/.\]()-])((?:\.{0,2}\/)?[\w.-]+(?:\/[\w.-]+)*\.(?:md|mdx|markdown|html?|txt))(?![\w/\]()-])/g
+const linkDocs = async ($: any, text: string) => {
+  const found = [...new Set([...text.matchAll(MENTION)].map(m => m[1]))].slice(0, 20)
+  const real = (await Promise.all(found.map(p => $.fs.exists(p).then((ok: boolean) => (ok ? p : ''), () => '')))).filter(Boolean)
+  if (!real.length) return { text, paths: [] as string[] }
+  const hit = new Set(real)
+  return { text: text.replace(MENTION, (m: string, p: string) => (hit.has(p) ? `[${m}](${LINK}${encodeURI(p)})` : m)), paths: real }
+}
+
 const docs: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -101,25 +127,33 @@ const docs: Register = on => {
     return { text: `Docs pane opened: ${files.length} files, ${notes.length} release notes, ${worktrees.length} worktrees.` }
   }).catch(() => ({ text: 'Docs pane could not open.' }))
 
+  // Click a doc a reply mentions to read it in the pane.
+  on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
+    const { text, paths } = await linkDocs($, e.props.text)
+    if (!paths.length) return next(e)
+    const { Box, Text, Markdown } = $.ui.resolve(e)
+    return (
+      <Box>
+        {e.props.isFirstOfReply && <Text>● </Text>}
+        <Markdown
+          key="reply"
+          text={text}
+          onLinkPress={async link => {
+            await loadDoc($, decodeURI(link.href.slice(LINK.length)))
+            await $.ui.open({ id: PANE, title: 'Docs' })
+          }}
+          pressableLinks={paths.map(p => `${LINK}${encodeURI(p)}`)}
+        />
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Markdown, Code } = $.ui.resolve(e)
     // $.state outlives a hot reload, so a value saved by an older version may lack newer fields.
     const v: DocsView = { ...EMPTY, ...(await read($, view)) }
 
-    const openFile = async (path: string) => {
-      let text = ''
-      let note = ''
-      try {
-        text = await $.fs.read(path)
-        if (text.length > MAX_CHARS) {
-          text = text.slice(0, MAX_CHARS)
-          note = 'Cut at 90000 characters.'
-        }
-      } catch {
-        note = `Cannot read ${path}.`
-      }
-      await update($, view, old => ({ ...old, path, text, note }))
-    }
+    const openFile = (path: string) => loadDoc($, path)
     const back = () => update($, view, old => ({ ...old, path: null, text: '', note: '' }))
     const wtPrefix = `${WORKTREES}/${v.openWt}/`
     const refresh = async () => {

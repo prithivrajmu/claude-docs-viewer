@@ -123,3 +123,16 @@ test('release notes group is hidden when the folder is missing or empty', async 
   const ui = await mountPane($)
   expect(await ui.find({ type: 'Text', text: 'Release notes' })).toBeUndefined()
 })
+
+test('a doc mentioned in a reply is a link that opens it in the pane', async ($: any, on: any) => {
+  fakeRepo(on, 'my-app')
+  const msg = (text: string) =>
+    $.ui.mount({ plugin: 'repo-docs', surface: 'terminal', component: 'AssistantMessage', props: { text, isFirstOfReply: true }, requestId: 'm1' })
+  const ui = await msg('I wrote README.md and nope.md.')
+  const md = await ui.find({ type: 'Markdown' })
+  expect(md.props.text).toContain('[README.md](file:///__docs__/README.md)')
+  expect(md.props.text).not.toContain('[nope.md]')
+  await ui.press({ key: 'reply', link: { href: 'file:///__docs__/README.md' } })
+  const pane = await mountPane($)
+  expect(await pane.find({ type: 'Markdown' })).toBeTruthy()
+})
